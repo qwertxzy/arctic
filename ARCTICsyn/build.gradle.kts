@@ -51,8 +51,6 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion")
 
     implementation("com.github.dpaukov:combinatoricslib3:3.3.0")
-
-    testImplementation("org.junit.jupiter:junit-jupiter:5.5")
 }
 
 application {
