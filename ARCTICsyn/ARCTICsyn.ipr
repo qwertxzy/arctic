@@ -48,7 +48,7 @@
   </component>
   <component name="ProjectModuleManager">
     <modules>
-      <module filepath="$PROJECT_DIR$/enuMap.iml" fileurl="file://$PROJECT_DIR$/enuMap.iml"/>
+      <module filepath="$PROJECT_DIR$/ARCTICsyn.iml" fileurl="file://$PROJECT_DIR$/ARCTICsyn.iml"/>
     </modules>
   </component>
   <component name="ProjectRootManager" version="2" languageLevel="JDK_11" assert-keyword="true" jdk-15="true" project-jdk-type="JavaSDK" assert-jdk-15="true" project-jdk-name="11">
