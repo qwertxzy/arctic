@@ -811,6 +811,8 @@ def startSimulation(assignment, simData, simSpec):
         valuesToSubstitute = determineInitialValuesToSubstitute(substitutionTruthTableKeys=substitutionTruthtableKeys,
                                                                 responseFunctions=responseFunctions,
                                                                 assignment=assignment, truthTable=truthTable)
+        debugMode = simContext["debug"]
+        substitutionMode = simContext["substitutionMode"]
 
         i = 0
         stop = False
@@ -835,14 +837,15 @@ def startSimulation(assignment, simData, simSpec):
                                                           previousValuesToSubstitute=previousValuesToSubstitute)
 
             stop = True
-            for key in substitutionTruthtableKeys:
-                stop = stop & (valuesToSubstitute[key] == previousValuesToSubstitute[key])
-                if (not stop):
-                    break
+            if (substitutionMode == 2):
+                for key in substitutionTruthtableKeys:
+                    stop = stop & (valuesToSubstitute[key] == previousValuesToSubstitute[key])
+                    if (not stop):
+                        break
             # Stop when there is no change in the values to substitute, since the result would be identical
 
             determineScores(results)
-            if (simContext["debug"]):
+            if (debugMode):
                 for key in results:
                     debugPrint(str(key) + ": " + str(results[key]["SCORE"]))
             debugPrint("Finished iteration %d (stop=%s) \n" % (i, str(stop)))
@@ -1231,6 +1234,7 @@ def startSimulation(assignment, simData, simSpec):
     Is used for each simulation as well as for the initialisation.
 """
 
+
 # This method parses the command line string
 def parseInput(inputText):
     # This method ensures, that the string is in the right format
@@ -1257,7 +1261,7 @@ def parseInput(inputText):
     instruction = inputText.split()  # Split at Whitespace!
 
     if (len(instruction) > 0):
-        cmd = instruction[0]    # Format: command [optional args]
+        cmd = instruction[0]  # Format: command [optional args]
         specDict = {}
         # Parse the arguments for the given command. No differentiation which command is present
         for elem in instruction[1:]:
@@ -1288,7 +1292,9 @@ def parseInput(inputText):
             elif (field == "whitelist" or field == "wh"):
                 specDict["whitelist"] = bool(parseBool(val))
             elif (field == "substitute"):
-                specDict["substitute"] = bool(parseBool(val))
+                substMode = int(val)
+                specDict["substitutionMode"] = substMode
+                specDict["substitute"] = (substMode > 0)
             elif (field == "store"):
                 specDict[field] = bool(parseBool(val))
             elif (field == "usermode"):
@@ -1321,15 +1327,18 @@ def parseInput(inputText):
     else:
         return "", {}
 
+
 # A helper method which can be used to print information relevant for any user
 def usermodePrint(text):
     if (simContext["usermode"]):
         print(text, file=sys.stdout)
 
+
 # A helper method for printing debug information in debug mode
 def debugPrint(text):
     if (simContext["debug"]):
         print(text, file=sys.stderr)
+
 
 # A method updating the simulation context based on the command args
 def updateSimContext(specDict):
@@ -1349,6 +1358,7 @@ simContext["visualise"] = False;
 simContext["visualise_circuit"] = False
 simContext["whitelist"] = False  # Can only be set at the initialisation of the simulator
 simContext["substitute"] = False
+simContext["substitutionMode"] = 0  # 0: no substitution, 1: correct substitution, 2: Incorrect iterative substitution
 simContext["store"] = False;
 simContext["usermode"] = False;
 simContext["debug"] = False;
@@ -1357,7 +1367,8 @@ simContext["assignment"] = "NULL";
 simContext["gate_lib"] = "NULL";  # Can only be set at the initialisation of the simulator
 simContext["threads"] = 1;  # Currently not used
 simContext["dist"] = "ws-log-exp-asym";  # The recommended scoring method
-simContext["envelop_mode"] = False  # Can only be set at the initialisation of the simulator (if dist not set explicitly then ev-asym is used)
+simContext[
+    "envelop_mode"] = False  # Can only be set at the initialisation of the simulator (if dist not set explicitly then ev-asym is used)
 simContext["particle_quantiles"] = None
 simContext["use_custom_input_specification"] = False  # Can only be set at the initialisation of the simulator
 simContext["custom_input_specification"] = None
@@ -1435,11 +1446,12 @@ while (inText != "exit"):
         if (simContext["assignment"] != "NULL"):
             # print(assignment)
             usermodePrint("Simulation started")
-            startSimulation(assignment=simContext["assignment"], simData=simData, simSpec=simSpec) # Perform simulation
+            startSimulation(assignment=simContext["assignment"], simData=simData, simSpec=simSpec)  # Perform simulation
             debugPrint("Iteration: " + str(iX))
             iX += 1
         else:
-            print("ERROR: Assignment needs to be defined at least once by adding \"assignment={...}\" or \"a_path=dir/file.json\" to after start.")
+            print(
+                "ERROR: Assignment needs to be defined at least once by adding \"assignment={...}\" or \"a_path=dir/file.json\" to after start.")
 
     if (cmd == "settings"):
         updateSimContext(specDict)
