@@ -11,7 +11,7 @@ import numpy as np
 Attention: Response Functions are only correct for the last provided parameter -> Particles not supported
 """
 
-
+# Calls plotCircuitWithValues for each possible input assignment and thus yields a visualisation of every combination possible
 def visualiseCircuitWithValues(circuit, assignment, responseFunctions, circuitValues):
     for inputID in circuitValues:
         plotCircuitWithValues(inputID, circuit=circuit, assignment=assignment, responseFunctions=responseFunctions,
