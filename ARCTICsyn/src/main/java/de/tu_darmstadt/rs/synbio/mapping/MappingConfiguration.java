@@ -21,7 +21,7 @@ public class MappingConfiguration {
     private final MappingConfiguration.OptimizationType optimizationType;
 
     public enum SearchAlgorithm {
-        EXHAUSTIVE, TABU, ANNEALING, DAC
+        EXHAUSTIVE, TABU, ANNEALING, DAC, GENETIC
     }
 
     public enum OptimizationType {
@@ -64,6 +64,9 @@ public class MappingConfiguration {
             case "DAC":
                 searchAlgorithm = SearchAlgorithm.DAC;
                 break;
+            case "GENETIC":
+                searchAlgorithm = SearchAlgorithm.GENETIC;
+                break;
             default:
                 throw new IOException("Unknown search algorithm! (Available algorithms: " + Arrays.toString(SearchAlgorithm.values()) + ")");
         }
@@ -95,6 +98,7 @@ public class MappingConfiguration {
 
         switch (searchAlgorithm) {
             case ANNEALING: return new SimulatedAnnealingSearch(structure, lib, this, simConfig);
+            case GENETIC: return new GeneticSearch(structure, lib, this, simConfig);
             default: return new ExhaustiveSearch(structure, lib, this, simConfig);
         }
     }
