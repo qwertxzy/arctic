@@ -14,6 +14,9 @@ import de.tu_darmstadt.rs.synbio.simulation.SimulatorInterface;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class GeneticSearch extends AssignmentSearchAlgorithm {
@@ -61,8 +64,39 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       logger.info("Beginning computation of generation " + currentIteration);
 
       // Calculate fitness of current population
-      // TODO: multithreading the simulation should be an easy way to achieve a significant speed-up per generation
 
+      List<GeneticSearchWorker> workers = new ArrayList<>();
+      int maxThreads = Runtime.getRuntime().availableProcessors() - 1;
+      int availableProcessors = simConfig.simLimitThreads() ? Math.min(simConfig.getSimLimitThreadsNum(), maxThreads) : maxThreads;
+      int sliceLength = (int) Math.ceil(currentPopulation.size() / availableProcessors);
+
+      // Split up current population into even slices to simulate
+      for (int i = 0; i < availableProcessors; i++) {
+        List<Assignment> slice = currentPopulation.subList(i * sliceLength, Math.min(((i + 1) * sliceLength), currentPopulation.size()));
+        workers.add(new GeneticSearchWorker(simConfig, gateLib, structure, slice));
+      }
+
+      ExecutorService executor = Executors.newFixedThreadPool(availableProcessors);
+
+      List<Future<HashMap<Assignment, Double>>> simResults = Collections.emptyList();
+
+      try {
+        simResults = executor.invokeAll(workers);
+      } catch (InterruptedException e) {
+        logger.error(e.getMessage());
+      }
+
+      // Consolidate the calculated fitnesses back into one Map
+      for (Future<HashMap<Assignment, Double>> result: simResults) {
+        try {
+          HashMap<Assignment, Double> fitnessSlice = result.get();
+          fitnessLookup.putAll(fitnessSlice);
+        } catch (Exception e) {
+          logger.error(e.getMessage());
+        }
+      }
+
+      // Now sort the current population based on the new fitness data
       currentPopulation.forEach(assignment -> {
         if (!fitnessLookup.containsKey(assignment)) {
           fitnessLookup.put(assignment, assignment.isValid() ? simulator.simulate(assignment) : 0.0);
