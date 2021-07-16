@@ -14,6 +14,7 @@ import de.tu_darmstadt.rs.synbio.simulation.SimulatorInterface;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class GeneticSearch extends AssignmentSearchAlgorithm {
 
@@ -54,15 +55,28 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     // Loop until exit condition is met
 
     currentIteration = 0;
-    int simCount = 0; // TODO: update simCount accordingly
+    AtomicLong simCount = new AtomicLong(); // Atomic long to increment it from lambda expr
+
     while (checkExitCondition()) {
       logger.info("Beginning computation of generation " + currentIteration);
 
       // Calculate fitness of current population
       // TODO: multithreading the simulation should be an easy way to achieve a significant speed-up per generation
 
-      currentPopulation.forEach(assignment -> {if (!fitnessLookup.containsKey(assignment)) {fitnessLookup.put(assignment, assignment.isValid() ? simulator.simulate(assignment) : 0.0);}});
-      currentPopulation.sort((a1, a2) -> fitnessLookup.get(a1).compareTo(fitnessLookup.get(a2)) * (-1)); // TODO: will not sort according to mapConfig
+      currentPopulation.forEach(assignment -> {
+        if (!fitnessLookup.containsKey(assignment)) {
+          fitnessLookup.put(assignment, assignment.isValid() ? simulator.simulate(assignment) : 0.0);
+          simCount.getAndIncrement();
+        }
+      });
+
+      if (mapConfig.getOptimizationType().equals(MappingConfiguration.OptimizationType.MAXIMIZE)) {
+        // Sort descending
+        currentPopulation.sort((a1, a2) -> fitnessLookup.get(a1).compareTo(fitnessLookup.get(a2)) * (-1));
+      } else {
+        // Sort ascending
+        currentPopulation.sort(Comparator.comparing(fitnessLookup::get));
+      }
 
       logger.info("Best score of the current generation: " + fitnessLookup.get(currentPopulation.get(0)));
       logger.info("Average score of the current generation: " + ( currentPopulation.stream().map(fitnessLookup::get).reduce(0.0, Double::sum) / populationSize ));
@@ -134,7 +148,7 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     }
 
     SimulationResult result = new SimulationResult(structure, bestAssignment, fitnessLookup.get(bestAssignment));
-    result.setNeededSimulations(simCount);
+    result.setNeededSimulations(simCount.get());
     simulator.shutdown();
     return result;
   }
