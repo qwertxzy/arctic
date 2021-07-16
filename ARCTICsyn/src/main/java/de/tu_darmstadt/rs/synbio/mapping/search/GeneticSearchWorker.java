@@ -6,34 +6,35 @@ import de.tu_darmstadt.rs.synbio.mapping.Assignment;
 import de.tu_darmstadt.rs.synbio.simulation.SimulationConfiguration;
 import de.tu_darmstadt.rs.synbio.simulation.SimulatorInterface;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
-public class GeneticSearchWorker implements Callable<HashMap<Assignment, Double>> {
+public class GeneticSearchWorker implements Callable<Void> {
 
   private final SimulatorInterface simulator;
-  private final Circuit structure;
   private final List<Assignment> population;
+  private final ConcurrentHashMap<Assignment, Double> fitnessLookup;
+  private final AtomicLong simCount;
 
-  public GeneticSearchWorker(SimulationConfiguration simConfig, GateLibrary gateLibrary, Circuit structure, List<Assignment> population) {
+  public GeneticSearchWorker(SimulatorInterface simulator, List<Assignment> population, ConcurrentHashMap<Assignment, Double> fitnessLookup, AtomicLong simCount) {
     this.population = population;
-    this.structure = structure;
-    this.simulator = new SimulatorInterface(simConfig, gateLibrary.getSourceFile());
+    this.fitnessLookup = fitnessLookup;
+    this.simulator = simulator;
+    this.simCount = simCount;
   }
 
   @Override
-  public HashMap<Assignment, Double> call() {
-    HashMap<Assignment, Double> fitnessLookup = new HashMap<>();
-
-    simulator.initSimulation(structure);
+  public Void call() {
 
     for (Assignment a : population) {
-      fitnessLookup.put(a, simulator.simulate(a));
+      if (!fitnessLookup.containsKey(a)) {
+        fitnessLookup.put(a, a.isValid() ? simulator.simulate(a) : 0.0);
+        simCount.getAndIncrement();
+      }
     }
 
-    simulator.shutdown();
-
-    return fitnessLookup;
+    return null;
   }
 }

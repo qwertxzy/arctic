@@ -14,9 +14,9 @@ import de.tu_darmstadt.rs.synbio.simulation.SimulatorInterface;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class GeneticSearch extends AssignmentSearchAlgorithm {
@@ -26,8 +26,8 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
   // TODO: get these parameters from the map.config
   private static final int populationSize = 1000;
   private static final int eliteNumber = 5;
-  private static final int crossoverCount = 500;
-  private static final int iterationCount = 100;
+  private static final int crossoverCount = 550;
+  private static final int iterationCount = 250;
   private static final double mutationRate = 0.02;
 
   public GeneticSearch(Circuit structure, GateLibrary lib, MappingConfiguration mapConfig, SimulationConfiguration simConfig) {
@@ -36,20 +36,31 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
   public SimulationResult assign() {
 
-    // Initialize gate library & simulator
+    // Initialize gate library & simulators
 
     HashMap<LogicType, List<GateRealization>> realizations = gateLib.getRealizations();
-    SimulatorInterface simulator = new SimulatorInterface(simConfig, gateLib.getSourceFile());
-    simulator.initSimulation(structure);
+
+    int maxThreads = Runtime.getRuntime().availableProcessors() - 1;
+    int availableProcessors = simConfig.simLimitThreads() ? Math.min(simConfig.getSimLimitThreadsNum(), maxThreads) : maxThreads;
+
+    List<SimulatorInterface> simulators = new ArrayList<>();
+    for (int i = 0; i < availableProcessors; i++) {
+      SimulatorInterface sim = new SimulatorInterface(simConfig, gateLib.getSourceFile());
+      sim.initSimulation(structure);
+      simulators.add(sim);
+    }
+
     RandomAssigner randomAssigner = new RandomAssigner(gateLib, structure);
     Random random = new Random();
 
-    // Generate initial population
+    // Declare population related variables
 
     List<Assignment> currentPopulation = new ArrayList<>();
     List<Assignment> nextPopulation = new ArrayList<>();
-    HashMap<Assignment, Double> fitnessLookup = new HashMap<>();
+    ConcurrentHashMap<Assignment, Double> fitnessLookup = new ConcurrentHashMap<>();
     Assignment bestAssignment = null;
+
+    // Generate initial population
 
     for (int i = 0; i < populationSize; i++) {
       currentPopulation.add(randomAssigner.getNextAssignment());
@@ -66,43 +77,23 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       // Calculate fitness of current population
 
       List<GeneticSearchWorker> workers = new ArrayList<>();
-      int maxThreads = Runtime.getRuntime().availableProcessors() - 1;
-      int availableProcessors = simConfig.simLimitThreads() ? Math.min(simConfig.getSimLimitThreadsNum(), maxThreads) : maxThreads;
       int sliceLength = (int) Math.ceil(currentPopulation.size() / availableProcessors);
 
       // Split up current population into even slices to simulate
       for (int i = 0; i < availableProcessors; i++) {
-        List<Assignment> slice = currentPopulation.subList(i * sliceLength, Math.min(((i + 1) * sliceLength), currentPopulation.size()));
-        workers.add(new GeneticSearchWorker(simConfig, gateLib, structure, slice));
+        List<Assignment> slice = currentPopulation.subList(i * sliceLength, (i == availableProcessors - 1 ? currentPopulation.size() : (i + 1) * sliceLength));
+        workers.add(new GeneticSearchWorker(simulators.get(i), slice, fitnessLookup, simCount));
       }
 
       ExecutorService executor = Executors.newFixedThreadPool(availableProcessors);
 
-      List<Future<HashMap<Assignment, Double>>> simResults = Collections.emptyList();
-
       try {
-        simResults = executor.invokeAll(workers);
+        executor.invokeAll(workers);
       } catch (InterruptedException e) {
         logger.error(e.getMessage());
       }
 
-      // Consolidate the calculated fitnesses back into one Map
-      for (Future<HashMap<Assignment, Double>> result: simResults) {
-        try {
-          HashMap<Assignment, Double> fitnessSlice = result.get();
-          fitnessLookup.putAll(fitnessSlice);
-        } catch (Exception e) {
-          logger.error(e.getMessage());
-        }
-      }
-
       // Now sort the current population based on the new fitness data
-      currentPopulation.forEach(assignment -> {
-        if (!fitnessLookup.containsKey(assignment)) {
-          fitnessLookup.put(assignment, assignment.isValid() ? simulator.simulate(assignment) : 0.0);
-          simCount.getAndIncrement();
-        }
-      });
 
       if (mapConfig.getOptimizationType().equals(MappingConfiguration.OptimizationType.MAXIMIZE)) {
         // Sort descending
@@ -122,7 +113,6 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       }
 
       // Take n best individuals, generate n / 2 crossed over children
-      // TODO: check whether the simulator will score double gate implementation usage with 0
 
       for (int i = 0; i < crossoverCount; i += 2) {
         Assignment firstParent = currentPopulation.get(i);
@@ -176,14 +166,18 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       // Move the next generation's individuals to the current generation
       // TODO: optimize this step, maybe work on two alternating lists instead of copying
 
-      bestAssignment = currentPopulation.get(1);
+      bestAssignment = currentPopulation.get(0);
       Collections.copy(currentPopulation, nextPopulation);
       nextPopulation.clear();
     }
 
     SimulationResult result = new SimulationResult(structure, bestAssignment, fitnessLookup.get(bestAssignment));
     result.setNeededSimulations(simCount.get());
-    simulator.shutdown();
+
+    for (SimulatorInterface sim : simulators) {
+      sim.shutdown();
+    }
+
     return result;
   }
 
