@@ -30,8 +30,12 @@ public class GeneticSearchWorker implements Callable<Void> {
 
     for (Assignment a : population) {
       if (!fitnessLookup.containsKey(a)) {
-        fitnessLookup.put(a, a.isValid() ? simulator.simulate(a) : 0.0);
-        simCount.getAndIncrement();
+        if (a.isValid()) {
+          fitnessLookup.put(a, simulator.simulate(a));
+          simCount.getAndIncrement();
+        } else {
+          fitnessLookup.put(a, 0.0);
+        }
       }
     }
 
