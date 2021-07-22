@@ -23,15 +23,20 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
   private static final Logger logger = LoggerFactory.getLogger(GeneticSearch.class);
 
-  // TODO: get these parameters from the map.config
-  private static final int populationSize = 1000;
-  private static final int eliteNumber = 5;
-  private static final int crossoverCount = 550;
-  private static final int iterationCount = 250;
-  private static final double mutationRate = 0.02;
+  private final int populationSize;
+  private final int eliteNumber ;
+  private final int crossoverCount;
+  private final int iterationCount;
+  private final double mutationRate;
 
   public GeneticSearch(Circuit structure, GateLibrary lib, MappingConfiguration mapConfig, SimulationConfiguration simConfig) {
     super(structure, lib, mapConfig, simConfig);
+
+    this.populationSize = mapConfig.getPopulationSize();
+    this.eliteNumber = mapConfig.getEliteNumber();
+    this.crossoverCount = mapConfig.getCrossoverCount();
+    this.iterationCount = mapConfig.getIterationCount();
+    this.mutationRate = mapConfig.getMutationRate();
   }
 
   public SimulationResult assign() {
@@ -72,7 +77,7 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     AtomicLong simCount = new AtomicLong(); // Atomic long to increment it from lambda expr
 
     while (checkExitCondition()) {
-      logger.info("Beginning computation of generation " + currentIteration);
+      logger.info("GEN: " + currentIteration);
 
       // Calculate fitness of current population
 
@@ -103,8 +108,9 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
         currentPopulation.sort(Comparator.comparing(fitnessLookup::get));
       }
 
-      logger.info("Best score of the current generation: " + fitnessLookup.get(currentPopulation.get(0)));
-      logger.info("Average score of the current generation: " + ( currentPopulation.stream().map(fitnessLookup::get).reduce(0.0, Double::sum) / populationSize ));
+      logger.info("|TOP: " + fitnessLookup.get(currentPopulation.get(0)));
+      logger.info("|TOP5: " + ( currentPopulation.subList(0, 5).stream().map(fitnessLookup::get).reduce(0.0, Double::sum) / 5 )); // TODO: doesn't work
+      logger.info("|AVG: " + ( currentPopulation.stream().map(fitnessLookup::get).reduce(0.0, Double::sum) / populationSize ));
 
       // Select the best n as elites to be carried over to the next generation
 
