@@ -1,9 +1,6 @@
 package de.tu_darmstadt.rs.synbio.mapping.search;
 
-import de.tu_darmstadt.rs.synbio.common.circuit.Circuit;
-import de.tu_darmstadt.rs.synbio.common.library.GateLibrary;
 import de.tu_darmstadt.rs.synbio.mapping.Assignment;
-import de.tu_darmstadt.rs.synbio.simulation.SimulationConfiguration;
 import de.tu_darmstadt.rs.synbio.simulation.SimulatorInterface;
 
 import java.util.List;
