@@ -14,12 +14,14 @@ public class GeneticSearchWorker implements Callable<Void> {
   private final List<Assignment> population;
   private final ConcurrentHashMap<Assignment, Double> fitnessLookup;
   private final AtomicLong simCount;
+  private final AtomicLong invalidCount;
 
-  public GeneticSearchWorker(SimulatorInterface simulator, List<Assignment> population, ConcurrentHashMap<Assignment, Double> fitnessLookup, AtomicLong simCount) {
+  public GeneticSearchWorker(SimulatorInterface simulator, List<Assignment> population, ConcurrentHashMap<Assignment, Double> fitnessLookup, AtomicLong simCount, AtomicLong invalidCount) {
     this.population = population;
     this.fitnessLookup = fitnessLookup;
     this.simulator = simulator;
     this.simCount = simCount;
+    this.invalidCount = invalidCount;
   }
 
   @Override
@@ -32,6 +34,7 @@ public class GeneticSearchWorker implements Callable<Void> {
           simCount.getAndIncrement();
         } else {
           fitnessLookup.put(a, 0.0);
+          invalidCount.getAndIncrement();
         }
       }
     }

@@ -74,20 +74,24 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     // Loop until exit condition is met
 
     currentIteration = 0;
-    AtomicLong simCount = new AtomicLong(); // Atomic long to increment it from lambda expr
+
+    // Atomic long to increment it from simulation threads
+    AtomicLong simCount = new AtomicLong(0);
+    AtomicLong invalidCount = new AtomicLong();
+
+    logger.info("Generation, Invalid, Top, Top5, Average");
 
     while (checkExitCondition()) {
-      logger.info("GEN: " + currentIteration);
-
       // Calculate fitness of current population
 
       List<GeneticSearchWorker> workers = new ArrayList<>();
       int sliceLength = (int) Math.ceil(currentPopulation.size() / availableProcessors);
+      invalidCount.set(0);
 
       // Split up current population into even slices to simulate
       for (int i = 0; i < availableProcessors; i++) {
         List<Assignment> slice = currentPopulation.subList(i * sliceLength, (i == availableProcessors - 1 ? currentPopulation.size() : (i + 1) * sliceLength));
-        workers.add(new GeneticSearchWorker(simulators.get(i), slice, fitnessLookup, simCount));
+        workers.add(new GeneticSearchWorker(simulators.get(i), slice, fitnessLookup, simCount, invalidCount));
       }
 
       ExecutorService executor = Executors.newFixedThreadPool(availableProcessors);
@@ -108,9 +112,13 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
         currentPopulation.sort(Comparator.comparing(fitnessLookup::get));
       }
 
-      logger.info("|TOP: " + fitnessLookup.get(currentPopulation.get(0)));
-      logger.info("|TOP5: " + ( currentPopulation.subList(0, 5).stream().map(fitnessLookup::get).reduce(0.0, Double::sum) / 5 )); // TODO: doesn't work
-      logger.info("|AVG: " + ( currentPopulation.stream().map(fitnessLookup::get).reduce(0.0, Double::sum) / populationSize ));
+      logger.info(
+              currentIteration +
+              "," + invalidCount.get() +
+              "," + fitnessLookup.get(currentPopulation.get(0)) +
+              "," + ( (currentPopulation.subList(0, 5).stream().map(fitnessLookup::get).reduce(0.0, Double::sum)) / 5.0 ) +
+              "," + ( currentPopulation.stream().map(fitnessLookup::get).reduce(0.0, Double::sum) / populationSize )
+      );
 
       // Select the best n as elites to be carried over to the next generation
 
