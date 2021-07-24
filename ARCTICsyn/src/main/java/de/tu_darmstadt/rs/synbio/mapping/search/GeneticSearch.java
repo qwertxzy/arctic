@@ -60,16 +60,15 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
     // Declare population related variables
 
-    List<Assignment> currentPopulation = new ArrayList<>();
-    List<Assignment> nextPopulation = new ArrayList<>();
-    ConcurrentHashMap<Assignment, Double> fitnessLookup = new ConcurrentHashMap<>();
-    Assignment bestAssignment = null;
+    List<Individual> currentPopulation = new ArrayList<>();
+    List<Individual> nextPopulation = new ArrayList<>();
 
     // Generate initial population
 
     for (int i = 0; i < populationSize; i++) {
-      currentPopulation.add(randomAssigner.getNextAssignment());
+      currentPopulation.add(new Individual(randomAssigner.getNextAssignment()));
     }
+    Individual bestIndividual = currentPopulation.get(0);
 
     // Loop until exit condition is met
 
@@ -85,13 +84,13 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       // Calculate fitness of current population
 
       List<GeneticSearchWorker> workers = new ArrayList<>();
-      int sliceLength = (int) Math.ceil(currentPopulation.size() / availableProcessors);
+      double sliceLength = currentPopulation.size() / (double) availableProcessors;
       invalidCount.set(0);
 
       // Split up current population into even slices to simulate
       for (int i = 0; i < availableProcessors; i++) {
-        List<Assignment> slice = currentPopulation.subList(i * sliceLength, (i == availableProcessors - 1 ? currentPopulation.size() : (i + 1) * sliceLength));
-        workers.add(new GeneticSearchWorker(simulators.get(i), slice, fitnessLookup, simCount, invalidCount));
+        List<Individual> slice = currentPopulation.subList((int) Math.ceil(i * sliceLength), (int) Math.ceil((i + 1) * sliceLength));
+        workers.add(new GeneticSearchWorker(simulators.get(i), slice, simCount, invalidCount));
       }
 
       ExecutorService executor = Executors.newFixedThreadPool(availableProcessors);
@@ -102,35 +101,37 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
         logger.error(e.getMessage());
       }
 
-      // Now sort the current population based on the new fitness data
-
-      if (mapConfig.getOptimizationType().equals(MappingConfiguration.OptimizationType.MAXIMIZE)) {
-        // Sort descending
-        currentPopulation.sort((a1, a2) -> fitnessLookup.get(a1).compareTo(fitnessLookup.get(a2)) * (-1));
-      } else {
-        // Sort ascending
-        currentPopulation.sort(Comparator.comparing(fitnessLookup::get));
-      }
-
-      logger.info(
-              currentIteration +
-              "," + invalidCount.get() +
-              "," + fitnessLookup.get(currentPopulation.get(0)) +
-              "," + ( (currentPopulation.subList(0, 5).stream().map(fitnessLookup::get).reduce(0.0, Double::sum)) / 5.0 ) +
-              "," + ( currentPopulation.stream().map(fitnessLookup::get).reduce(0.0, Double::sum) / populationSize )
-      );
-
       // Select the best n as elites to be carried over to the next generation
 
       for (int i = 0; i < eliteNumber; i++) {
         nextPopulation.add(currentPopulation.get(i));
       }
 
-      // Take n best individuals, generate n / 2 crossed over children
+      // Apply stochastic universal sampling to choose parents via roulette wheel selection
 
-      for (int i = 0; i < crossoverCount; i += 2) {
-        Assignment firstParent = currentPopulation.get(i);
-        Assignment secondParent = currentPopulation.get(i + 1);
+      double totalFitness = currentPopulation.stream().map(Individual::getScore).reduce(0.0, Double::sum);
+      double intervalDistance = totalFitness / crossoverCount;
+      double startPoint = intervalDistance * random.nextDouble();
+
+      List<Double> pointers = new ArrayList<>();
+      for (int i = 0; i < crossoverCount; i++) {
+        pointers.add(startPoint + i * intervalDistance);
+      }
+
+      List<Assignment> parents = new ArrayList<>();
+      for (Double point : pointers) {
+        int i = 1;
+        while (currentPopulation.subList(0, i).stream().map(Individual::getScore).reduce(0.0, Double::sum) < point) {
+          i++;
+        }
+        parents.add(currentPopulation.get(i - 1).getAssignment()); // TODO: is this -1 correct? look over the whole SUS in general
+      }
+
+      // Cross parents with random crossover point
+
+      for (int i = 0; i < parents.size(); i += 2) {
+        Assignment firstParent = parents.get(i);
+        Assignment secondParent = parents.get(i + 1);
         Assignment firstChild = new Assignment();
         Assignment secondChild = new Assignment();
 
@@ -152,40 +153,50 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
           secondChild.put(genomeKeys[j], secondRealization);
         }
 
-        nextPopulation.add(firstChild);
-        nextPopulation.add(secondChild);
+        nextPopulation.add(new Individual(firstChild));
+        nextPopulation.add(new Individual(secondChild));
       }
 
       // Apply random mutation (select a random equivalent gate implementation for random individuals)
 
-      for (Assignment individual : currentPopulation) {
+      for (Individual individual : nextPopulation) {
         if (random.nextDouble() <= mutationRate) {
-          LogicGate[] individualGates = individual.keySet().toArray(new LogicGate[0]);
+          Assignment individualAssignment = individual.getAssignment();
+          LogicGate[] individualGates = individualAssignment.keySet().toArray(new LogicGate[0]);
           LogicGate mutatingGate = individualGates[random.nextInt(individualGates.length)];
 
           List<GateRealization> possibleAlternatives = realizations.get(mutatingGate.getLogicType());
           GateRealization newRealization = possibleAlternatives.get(random.nextInt(possibleAlternatives.size()));
 
-          individual.put(mutatingGate, newRealization);
-          nextPopulation.add(individual);
+          individual.getAssignment().put(mutatingGate, newRealization);
         }
       }
 
       // Fill up the rest with new random individuals
 
       for (int i = 0; i < populationSize - nextPopulation.size(); i++) {
-        nextPopulation.add(randomAssigner.getNextAssignment());
+        nextPopulation.add(new Individual(randomAssigner.getNextAssignment()));
       }
+
+      // Extract the best individual
+      // TODO: make this respect the OptimizationType here & above in the parent selection
+      bestIndividual = currentPopulation.stream().max(Comparator.comparing(Individual::getScore)).get();
+
+      logger.info(
+          currentIteration +
+              "," + invalidCount.get() +
+              "," + bestIndividual.getScore() +
+              "," + ( (currentPopulation.subList(0, 5).stream().map(Individual::getScore).reduce(0.0, Double::sum)) / 5.0 ) +
+              "," + ( currentPopulation.stream().map(Individual::getScore).reduce(0.0, Double::sum) / populationSize )
+      );
 
       // Move the next generation's individuals to the current generation
       // TODO: optimize this step, maybe work on two alternating lists instead of copying
-
-      bestAssignment = currentPopulation.get(0);
       Collections.copy(currentPopulation, nextPopulation);
       nextPopulation.clear();
     }
 
-    SimulationResult result = new SimulationResult(structure, bestAssignment, fitnessLookup.get(bestAssignment));
+    SimulationResult result = new SimulationResult(structure, bestIndividual.getAssignment(), bestIndividual.getScore());
     result.setNeededSimulations(simCount.get());
 
     for (SimulatorInterface sim : simulators) {
@@ -201,5 +212,27 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     currentIteration++;
     // TODO: Switch depending on exit after n iterations or achieved score or whatever
     return currentIteration <= iterationCount;
+  }
+
+  // Tuple class for the population lists
+  public static class Individual {
+    private final Assignment assignment;
+    private Double score;
+
+    Individual(Assignment assignment) {
+      this.assignment = assignment;
+    }
+
+    public Assignment getAssignment() {
+      return this.assignment;
+    }
+
+    public void setScore(Double score) {
+      this.score = score;
+    }
+
+    public Double getScore() {
+      return score;
+    }
   }
 }

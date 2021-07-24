@@ -1,24 +1,19 @@
 package de.tu_darmstadt.rs.synbio.mapping.search;
-
-import de.tu_darmstadt.rs.synbio.mapping.Assignment;
 import de.tu_darmstadt.rs.synbio.simulation.SimulatorInterface;
 
 import java.util.List;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class GeneticSearchWorker implements Callable<Void> {
 
   private final SimulatorInterface simulator;
-  private final List<Assignment> population;
-  private final ConcurrentHashMap<Assignment, Double> fitnessLookup;
+  private final List<GeneticSearch.Individual> population;
   private final AtomicLong simCount;
   private final AtomicLong invalidCount;
 
-  public GeneticSearchWorker(SimulatorInterface simulator, List<Assignment> population, ConcurrentHashMap<Assignment, Double> fitnessLookup, AtomicLong simCount, AtomicLong invalidCount) {
+  public GeneticSearchWorker(SimulatorInterface simulator, List<GeneticSearch.Individual> population, AtomicLong simCount, AtomicLong invalidCount) {
     this.population = population;
-    this.fitnessLookup = fitnessLookup;
     this.simulator = simulator;
     this.simCount = simCount;
     this.invalidCount = invalidCount;
@@ -27,15 +22,13 @@ public class GeneticSearchWorker implements Callable<Void> {
   @Override
   public Void call() {
 
-    for (Assignment a : population) {
-      if (!fitnessLookup.containsKey(a)) {
-        if (a.isValid()) {
-          fitnessLookup.put(a, simulator.simulate(a));
-          simCount.getAndIncrement();
-        } else {
-          fitnessLookup.put(a, 0.0);
-          invalidCount.getAndIncrement();
-        }
+    for (GeneticSearch.Individual individual : population) {
+      if (individual.getAssignment().isValid()) {
+        individual.setScore(simulator.simulate(individual.getAssignment()));
+        simCount.getAndIncrement();
+      } else {
+        individual.setScore(0.0);
+        invalidCount.getAndIncrement();
       }
     }
 
