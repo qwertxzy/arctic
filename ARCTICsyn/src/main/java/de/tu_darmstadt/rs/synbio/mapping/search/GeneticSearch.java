@@ -102,7 +102,7 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       }
 
       // Select the best n as elites to be carried over to the next generation
-
+      // TODO: nonsense, list is not sorted anymore
       for (int i = 0; i < eliteNumber; i++) {
         nextPopulation.add(currentPopulation.get(i));
       }
@@ -120,11 +120,11 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
       List<Assignment> parents = new ArrayList<>();
       for (Double point : pointers) {
-        int i = 1;
-        while (currentPopulation.subList(0, i).stream().map(Individual::getScore).reduce(0.0, Double::sum) < point) {
+        int i = 0;
+        while (currentPopulation.subList(0, i + 1).stream().map(Individual::getScore).reduce(0.0, Double::sum) < point) {
           i++;
         }
-        parents.add(currentPopulation.get(i - 1).getAssignment()); // TODO: is this -1 correct? look over the whole SUS in general
+        parents.add(currentPopulation.get(i).getAssignment());
       }
 
       // Cross parents with random crossover point
@@ -191,9 +191,8 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       );
 
       // Move the next generation's individuals to the current generation
-      // TODO: optimize this step, maybe work on two alternating lists instead of copying
-      Collections.copy(currentPopulation, nextPopulation);
-      nextPopulation.clear();
+      currentPopulation = nextPopulation;
+      nextPopulation = new ArrayList<>();
     }
 
     SimulationResult result = new SimulationResult(structure, bestIndividual.getAssignment(), bestIndividual.getScore());

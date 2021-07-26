@@ -27,7 +27,7 @@ public class GeneticSearchWorker implements Callable<Void> {
         individual.setScore(simulator.simulate(individual.getAssignment()));
         simCount.getAndIncrement();
       } else {
-        individual.setScore(0.0);
+        individual.setScore(0.001);
         invalidCount.getAndIncrement();
       }
     }
