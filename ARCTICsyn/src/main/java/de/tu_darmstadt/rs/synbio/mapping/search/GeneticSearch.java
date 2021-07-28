@@ -13,11 +13,13 @@ import de.tu_darmstadt.rs.synbio.simulation.SimulationResult;
 import de.tu_darmstadt.rs.synbio.simulation.SimulatorInterface;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.PrintWriter;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 public class GeneticSearch extends AssignmentSearchAlgorithm {
 
@@ -44,6 +46,7 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     // Initialize gate library & simulators
 
     HashMap<LogicType, List<GateRealization>> realizations = gateLib.getRealizations();
+    StringBuilder detailCSV = new StringBuilder(); // CSV export of all fitness data for further analysis
 
     int maxThreads = Runtime.getRuntime().availableProcessors() - 1;
     int availableProcessors = simConfig.simLimitThreads() ? Math.min(simConfig.getSimLimitThreadsNum(), maxThreads) : maxThreads;
@@ -174,7 +177,7 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
       // Fill up the rest with new random individuals
 
-      for (int i = 0; i < populationSize - nextPopulation.size(); i++) {
+      while (nextPopulation.size() < populationSize) {
         nextPopulation.add(new Individual(randomAssigner.getNextAssignment()));
       }
 
@@ -190,6 +193,8 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
               "," + ( currentPopulation.stream().map(Individual::getScore).reduce(0.0, Double::sum) / populationSize )
       );
 
+      detailCSV.append(currentPopulation.stream().map(Individual::getScore).map(Objects::toString).collect(Collectors.joining(","))).append("\n");
+
       // Move the next generation's individuals to the current generation
       currentPopulation = nextPopulation;
       nextPopulation = new ArrayList<>();
@@ -200,6 +205,15 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
     for (SimulatorInterface sim : simulators) {
       sim.shutdown();
+    }
+
+    // Export the generated CSV output
+
+    try {
+      PrintWriter out = new PrintWriter("details.csv");
+      out.println(detailCSV);
+    } catch (Exception e) {
+      logger.error(e.getMessage());
     }
 
     return result;
