@@ -33,20 +33,15 @@ public class GeneticSearchWorker implements Callable<Void> {
     for (GeneticSearchIndividual individual : population) {
       Assignment assignment = GeneticSearchIndividual.geneticDecode(realizations, geneEncoding, individual.getEncodedAssignment(), individual.getAssignment().keySet());
 
-      // Assignment might be null if a genome contained an out of bounds index
-      if (assignment == null) {
-        individual.setScore(0.001);
-        invalidCount.getAndIncrement();
-        continue;
-      }
-
-      individual.setAssignment(assignment);
-
-      if (assignment.isValid()) {
+      // Assignment might be null if a genome contained an out-of-bounds index
+      if (assignment != null && assignment.isValid()) {
+        individual.setAssignment(assignment);
         individual.setScore(simulator.simulate(individual.getAssignment()));
+
         simCount.getAndIncrement();
       } else {
         individual.setScore(0.001);
+
         invalidCount.getAndIncrement();
       }
     }
