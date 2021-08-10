@@ -129,7 +129,7 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       }
 
       // Extract the best individual
-      // TODO: make this respect the OptimizationType here & above in the parent selection
+      // FIXME: make this respect the OptimizationType here & above in the parent selection
       GeneticSearchIndividual generationBestIndividual = currentPopulation.stream().max(Comparator.comparing(GeneticSearchIndividual::getScore)).get();
       bestIndividual = (generationBestIndividual.getScore() > bestIndividual.getScore() ? generationBestIndividual : bestIndividual);
 
@@ -137,16 +137,15 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
               currentIteration +
                       "," + invalidCount.get() +
                       "," + bestIndividual.getScore() +
-                      "," + ( (currentPopulation.subList(0, 5).stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum)) / 5.0 ) +
+                      "," + ( (currentPopulation.stream().sorted().collect(Collectors.toList()).subList(0, 5).stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum)) / 5.0 ) +
                       "," + ( currentPopulation.stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum) / populationSize )
       );
 
       detailCSV.append(currentPopulation.stream().map(GeneticSearchIndividual::getScore).map(Objects::toString).collect(Collectors.joining(","))).append("\n");
 
       // Select the best n as elites to be carried over to the next generation
-      // TODO: nonsense, list is not sorted anymore
-      for (int i = 0; i < eliteNumber; i++) {
-        nextPopulation.add(currentPopulation.get(i));
+      if (eliteNumber > 0) {
+        nextPopulation.addAll(currentPopulation.stream().sorted().collect(Collectors.toList()).subList(0, eliteNumber));
       }
 
       // Apply stochastic universal sampling to choose parents via roulette wheel selection
@@ -248,7 +247,7 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
   private boolean checkExitCondition() {
     currentIteration++;
-    // TODO: Switch depending on exit after n iterations or achieved score or whatever
+    // FIXME: Switch depending on exit after n iterations or achieved score or whatever
     return currentIteration <= iterationCount;
   }
 

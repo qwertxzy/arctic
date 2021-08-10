@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class GeneticSearchIndividual {
+public class GeneticSearchIndividual implements Comparable<GeneticSearchIndividual> {
     private Assignment assignment;
     private String encodedAssignment;
     private Double score;
@@ -73,5 +73,10 @@ public class GeneticSearchIndividual {
             i++;
         }
         return assignment;
+    }
+
+    @Override
+    public int compareTo(GeneticSearchIndividual other) {
+        return this.getScore().compareTo(other.getScore()) * -1;
     }
 }
