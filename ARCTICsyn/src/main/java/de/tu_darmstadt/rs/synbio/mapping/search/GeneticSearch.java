@@ -52,9 +52,9 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       int realizationAmount = realizations.get(type).size();
       int bitWidth = (int) Math.ceil(Math.log(realizationAmount / Math.log(2))) + 1;
 
+      List<Integer> grayCodes = grayCode(bitWidth);
       for (int i = 0; i < realizationAmount; i++) {
-        // TODO: change from incrementing to gray sequence
-        String binaryString = Integer.toBinaryString(i);
+        String binaryString = Integer.toBinaryString(grayCodes.get(i));
         String paddedString = String.format("%" + bitWidth + "s", binaryString).replaceAll(" ", "0");
         binaryRepresentations.add(paddedString);
       }
@@ -107,8 +107,8 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     logger.info("Generation, Invalid, Top, Top5, Average");
 
     while (checkExitCondition()) {
-      // Calculate fitness of current population
 
+      // Calculate fitness of current population
       List<GeneticSearchWorker> workers = new ArrayList<>();
       double sliceLength = currentPopulation.size() / (double) availableProcessors;
       invalidCount.set(0);
@@ -120,6 +120,7 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       }
 
       ExecutorService executor = Executors.newFixedThreadPool(availableProcessors);
+      // TODO: these don't need to be reconstructed each loop
 
       try {
         executor.invokeAll(workers);
@@ -129,7 +130,8 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
       // Extract the best individual
       // TODO: make this respect the OptimizationType here & above in the parent selection
-      bestIndividual = currentPopulation.stream().max(Comparator.comparing(GeneticSearchIndividual::getScore)).get();
+      GeneticSearchIndividual generationBestIndividual = currentPopulation.stream().max(Comparator.comparing(GeneticSearchIndividual::getScore)).get();
+      bestIndividual = (generationBestIndividual.getScore() > bestIndividual.getScore() ? generationBestIndividual : bestIndividual);
 
       logger.info(
               currentIteration +
@@ -161,7 +163,7 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       List<GeneticSearchIndividual> parents = new ArrayList<>();
       for (Double point : pointers) {
         int i = 0;
-        while (currentPopulation.subList(0, i + 1).stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum) < point) {
+        while (currentPopulation.subList(0, i + 1).stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum) < point) { // TODO: maybe scale the fitness, fit solutions dominate the pool too much
           i++;
         }
         parents.add(currentPopulation.get(i));
@@ -248,5 +250,23 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     currentIteration++;
     // TODO: Switch depending on exit after n iterations or achieved score or whatever
     return currentIteration <= iterationCount;
+  }
+
+  // Taken from https://www.programcreek.com/2014/05/leetcode-gray-code-java/
+  private List<Integer> grayCode(int n) {
+    if(n == 0) {
+      List<Integer> result = new ArrayList<>();
+      result.add(0);
+      return result;
+    }
+
+    List<Integer> result = grayCode(n - 1);
+    int numToAdd = 1 << (n - 1);
+
+    for(int i = result.size() - 1; i >= 0; i--){ //iterate from last to first
+      result.add(numToAdd + result.get(i));
+    }
+
+    return result;
   }
 }

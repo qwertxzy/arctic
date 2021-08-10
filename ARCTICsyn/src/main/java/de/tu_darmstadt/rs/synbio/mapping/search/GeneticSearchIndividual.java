@@ -62,7 +62,7 @@ public class GeneticSearchIndividual {
             int bitWidth = geneEncoding.get(gate.getLogicType()).get(0).length();
             String encodedGate = encodedAssignment.substring(0, bitWidth);
             encodedAssignment = encodedAssignment.substring(bitWidth);
-            int realizationIndex = Integer.parseInt(encodedGate, 2);
+            int realizationIndex = geneEncoding.get(gate.getLogicType()).indexOf(encodedGate); // TODO: indexOf is inefficient, index could be calculated
             GateRealization realization;
             try {
                 realization = realizations.get(gate.getLogicType()).get(realizationIndex);
