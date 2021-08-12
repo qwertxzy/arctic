@@ -219,7 +219,8 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
           char mutatingChar = mutatingGenome.charAt(mutatingIndex);
 
           mutatingGenome.setCharAt(mutatingIndex, (mutatingChar == '0' ? '1' : '0'));
-          // FIXME: actually add the mutated genome back to the individual, oops
+
+          individual.setEncodedAssignment(mutatingGenome.toString());
         }
       }
 
