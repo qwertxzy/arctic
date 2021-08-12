@@ -2,10 +2,8 @@ package de.tu_darmstadt.rs.synbio.mapping.search;
 
 import de.tu_darmstadt.rs.synbio.common.LogicType;
 import de.tu_darmstadt.rs.synbio.common.circuit.Circuit;
-import de.tu_darmstadt.rs.synbio.common.circuit.LogicGate;
 import de.tu_darmstadt.rs.synbio.common.library.GateLibrary;
 import de.tu_darmstadt.rs.synbio.common.library.GateRealization;
-import de.tu_darmstadt.rs.synbio.mapping.Assignment;
 import de.tu_darmstadt.rs.synbio.mapping.MappingConfiguration;
 import de.tu_darmstadt.rs.synbio.mapping.assigner.RandomAssigner;
 import de.tu_darmstadt.rs.synbio.simulation.SimulationConfiguration;
@@ -128,41 +126,54 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
         logger.error(e.getMessage());
       }
 
+      // Sort the current population by fitness
+      if (mapConfig.getOptimizationType() == MappingConfiguration.OptimizationType.MAXIMIZE) {
+        Collections.sort(currentPopulation);
+      } else {
+        Collections.sort(currentPopulation, Collections.reverseOrder());
+      }
+
       // Extract the best individual
-      // FIXME: make this respect the OptimizationType here & above in the parent selection
-      GeneticSearchIndividual generationBestIndividual = currentPopulation.stream().max(Comparator.comparing(GeneticSearchIndividual::getScore)).get();
+      GeneticSearchIndividual generationBestIndividual = currentPopulation.get(0);
       bestIndividual = (generationBestIndividual.getScore() > bestIndividual.getScore() ? generationBestIndividual : bestIndividual);
 
       logger.info(
               currentIteration +
                       "," + invalidCount.get() +
                       "," + bestIndividual.getScore() +
-                      "," + ( (currentPopulation.stream().sorted().collect(Collectors.toList()).subList(0, 5).stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum)) / 5.0 ) +
+                      "," + ( (currentPopulation.subList(0, 5).stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum)) / 5.0 ) +
                       "," + ( currentPopulation.stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum) / populationSize )
       );
 
-      detailCSV.append(currentPopulation.stream().map(GeneticSearchIndividual::getScore).map(Objects::toString).collect(Collectors.joining(","))).append("\n");
+      detailCSV.append(currentPopulation.stream().map(GeneticSearchIndividual::getScore)
+          .map(Objects::toString).collect(Collectors.joining(","))).append("\n");
 
       // Select the best n as elites to be carried over to the next generation
+
       if (eliteNumber > 0) {
-        nextPopulation.addAll(currentPopulation.stream().sorted().collect(Collectors.toList()).subList(0, eliteNumber));
+        nextPopulation.addAll(currentPopulation.subList(0, eliteNumber));
       }
 
-      // Apply stochastic universal sampling to choose parents via roulette wheel selection
+      // Apply rank-based roulette wheel selection
 
-      double totalFitness = currentPopulation.stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum);
-      double intervalDistance = totalFitness / crossoverCount;
-      double startPoint = intervalDistance * random.nextDouble();
+      List<Integer> rankWeights = new ArrayList<>();
+      for (int i = 0; i < populationSize; i++) {
+        // Rank n gets (populationSize - n - 1)^2 points
+        rankWeights.add((int) Math.pow((populationSize - i), 2));
+      }
 
-      List<Double> pointers = new ArrayList<>();
+      int intervalDistance = rankWeights.stream().reduce(0, Integer::sum) / crossoverCount;
+      int startPoint = random.nextInt(intervalDistance);
+
+      List<Integer> pointers = new ArrayList<>();
       for (int i = 0; i < crossoverCount; i++) {
         pointers.add(startPoint + i * intervalDistance);
       }
 
       List<GeneticSearchIndividual> parents = new ArrayList<>();
-      for (Double point : pointers) {
+      for (Integer point : pointers) {
         int i = 0;
-        while (currentPopulation.subList(0, i + 1).stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum) < point) { // TODO: maybe scale the fitness, fit solutions dominate the pool too much
+        while (rankWeights.subList(0, i + 1).stream().reduce(0, Integer::sum) < point) {
           i++;
         }
         parents.add(currentPopulation.get(i));
@@ -170,9 +181,9 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
       // Cross parents with random crossover point
 
-      for (int i = 0; i < parents.size(); i += 2) {
+      for (int i = 0; i < parents.size() / 2; i++) {
         GeneticSearchIndividual firstParent = parents.get(i);
-        GeneticSearchIndividual secondParent = parents.get(i + 1);
+        GeneticSearchIndividual secondParent = parents.get(parents.size() - i - 1);
 
         StringBuilder encodedFirstChild = new StringBuilder();
         StringBuilder encodedSecondChild = new StringBuilder();
@@ -198,7 +209,7 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
         nextPopulation.add(secondChild); // chaansu
       }
 
-      // Apply random mutation (select a random equivalent gate implementation for random individuals)
+      // Apply random mutation
 
       for (GeneticSearchIndividual individual : nextPopulation) {
         if (random.nextDouble() <= mutationRate) {
@@ -208,6 +219,7 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
           char mutatingChar = mutatingGenome.charAt(mutatingIndex);
 
           mutatingGenome.setCharAt(mutatingIndex, (mutatingChar == '0' ? '1' : '0'));
+          // FIXME: actually add the mutated genome back to the individual, oops
         }
       }
 
