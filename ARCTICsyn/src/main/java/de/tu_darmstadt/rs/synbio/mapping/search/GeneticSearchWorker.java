@@ -2,6 +2,7 @@ package de.tu_darmstadt.rs.synbio.mapping.search;
 import de.tu_darmstadt.rs.synbio.common.LogicType;
 import de.tu_darmstadt.rs.synbio.common.library.GateRealization;
 import de.tu_darmstadt.rs.synbio.mapping.Assignment;
+import de.tu_darmstadt.rs.synbio.mapping.util.BitField;
 import de.tu_darmstadt.rs.synbio.simulation.SimulatorInterface;
 
 import java.util.List;
@@ -13,12 +14,12 @@ public class GeneticSearchWorker implements Callable<Void> {
 
   private final SimulatorInterface simulator;
   private final List<GeneticSearchIndividual> population;
-  private final Map<LogicType, List<String>> geneEncoding;
+  private final Map<LogicType, List<BitField>> geneEncoding;
   private final Map<LogicType, List<GateRealization>> realizations;
   private final AtomicLong simCount;
   private final AtomicLong invalidCount;
 
-  public GeneticSearchWorker(SimulatorInterface simulator, List<GeneticSearchIndividual> population, Map<LogicType, List<GateRealization>> realizations, Map<LogicType, List<String>> geneEncoding, AtomicLong simCount, AtomicLong invalidCount) {
+  public GeneticSearchWorker(SimulatorInterface simulator, List<GeneticSearchIndividual> population, Map<LogicType, List<GateRealization>> realizations, Map<LogicType, List<BitField>> geneEncoding, AtomicLong simCount, AtomicLong invalidCount) {
     this.population = population;
     this.simulator = simulator;
     this.geneEncoding = geneEncoding;

@@ -6,6 +6,7 @@ import de.tu_darmstadt.rs.synbio.common.library.GateLibrary;
 import de.tu_darmstadt.rs.synbio.common.library.GateRealization;
 import de.tu_darmstadt.rs.synbio.mapping.MappingConfiguration;
 import de.tu_darmstadt.rs.synbio.mapping.assigner.RandomAssigner;
+import de.tu_darmstadt.rs.synbio.mapping.util.BitField;
 import de.tu_darmstadt.rs.synbio.simulation.SimulationConfiguration;
 import de.tu_darmstadt.rs.synbio.simulation.SimulationResult;
 import de.tu_darmstadt.rs.synbio.simulation.SimulatorInterface;
@@ -13,7 +14,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.PrintWriter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
@@ -28,7 +36,7 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
   private final int crossoverCount;
   private final int iterationCount;
   private final double mutationRate;
-  private final Map<LogicType, List<String>> geneEncoding; // TODO: change String to BitSet to improve performance
+  private final Map<LogicType, List<BitField>> geneEncoding;
   private final Map<LogicType, List<GateRealization>> realizations;
 
 
@@ -46,15 +54,18 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     this.geneEncoding = new HashMap<>();
 
     for (LogicType type : realizations.keySet()) {
-      List<String> binaryRepresentations = new ArrayList<>();
       int realizationAmount = realizations.get(type).size();
-      int bitWidth = (int) Math.ceil(Math.log(realizationAmount / Math.log(2))) + 1;
+      int bitWidth = (int) Math.ceil(Math.log(realizationAmount / Math.log(2)) + 1);
+
+      List<BitField> binaryRepresentations = new ArrayList<>();
 
       List<Integer> grayCodes = grayCode(bitWidth);
-      for (int i = 0; i < realizationAmount; i++) {
-        String binaryString = Integer.toBinaryString(grayCodes.get(i));
-        String paddedString = String.format("%" + bitWidth + "s", binaryString).replaceAll(" ", "0");
-        binaryRepresentations.add(paddedString);
+      for (int i = 1; i <= realizationAmount; i++) {
+        Integer grayNumber = grayCodes.get(i);
+        BitField binaryRepresentation = new BitField(bitWidth);
+        binaryRepresentation.or(BitField.parseInt(grayNumber));
+
+        binaryRepresentations.add(binaryRepresentation);
       }
 
       geneEncoding.put(type, binaryRepresentations);
@@ -185,27 +196,30 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
         GeneticSearchIndividual firstParent = parents.get(i);
         GeneticSearchIndividual secondParent = parents.get(parents.size() - i - 1);
 
-        StringBuilder encodedFirstChild = new StringBuilder();
-        StringBuilder encodedSecondChild = new StringBuilder();
+        int bitSetWidth = firstParent.getEncodedAssignment().length();
+
+        BitField encodedFirstChild = new BitField(bitSetWidth);
+        BitField encodedSecondChild = new BitField(bitSetWidth);
 
         int crossoverPoint = random.nextInt(firstParent.getEncodedAssignment().length());
 
         for (int j = 0; j < firstParent.getEncodedAssignment().length(); j++) {
           if (crossoverPoint < j) {
-            encodedFirstChild.append(firstParent.getEncodedAssignment().charAt(j));
-            encodedSecondChild.append(secondParent.getEncodedAssignment().charAt(j));
+            encodedFirstChild.setBit(j, firstParent.getEncodedAssignment().getBit(j));
+            encodedSecondChild.setBit(j, secondParent.getEncodedAssignment().getBit(j));
           } else {
-            encodedFirstChild.append(secondParent.getEncodedAssignment().charAt(j));
-            encodedSecondChild.append(firstParent.getEncodedAssignment().charAt(j));
+            encodedFirstChild.setBit(j, secondParent.getEncodedAssignment().getBit(j));
+            encodedSecondChild.setBit(j, firstParent.getEncodedAssignment().getBit(j));
           }
         }
 
-        GeneticSearchIndividual firstChild = new GeneticSearchIndividual(firstParent.getAssignment()); // Will not match encodedAssignment, but is needed for the keyset
-        firstChild.setEncodedAssignment(encodedFirstChild.toString());
+        // Add parent assignment back to individual for future decoding (needs gatemap keyset)
+        GeneticSearchIndividual firstChild = new GeneticSearchIndividual(firstParent.getAssignment());
+        firstChild.setEncodedAssignment(encodedFirstChild);
         nextPopulation.add(firstChild);
 
         GeneticSearchIndividual secondChild = new GeneticSearchIndividual(secondParent.getAssignment());
-        secondChild.setEncodedAssignment(encodedSecondChild.toString());
+        secondChild.setEncodedAssignment(encodedSecondChild);
         nextPopulation.add(secondChild); // chaansu
       }
 
@@ -213,14 +227,13 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
       for (GeneticSearchIndividual individual : nextPopulation) {
         if (random.nextDouble() <= mutationRate) {
-          StringBuilder mutatingGenome = new StringBuilder(individual.getEncodedAssignment());
+          BitField mutatingGenome = individual.getEncodedAssignment();
 
           int mutatingIndex = random.nextInt(mutatingGenome.length());
-          char mutatingChar = mutatingGenome.charAt(mutatingIndex);
 
-          mutatingGenome.setCharAt(mutatingIndex, (mutatingChar == '0' ? '1' : '0'));
+          mutatingGenome.flipBit(mutatingIndex);
 
-          individual.setEncodedAssignment(mutatingGenome.toString());
+          individual.setEncodedAssignment(mutatingGenome);
         }
       }
 

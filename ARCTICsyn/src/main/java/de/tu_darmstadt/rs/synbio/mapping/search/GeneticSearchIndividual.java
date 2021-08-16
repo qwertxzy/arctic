@@ -4,6 +4,7 @@ import de.tu_darmstadt.rs.synbio.common.LogicType;
 import de.tu_darmstadt.rs.synbio.common.circuit.LogicGate;
 import de.tu_darmstadt.rs.synbio.common.library.GateRealization;
 import de.tu_darmstadt.rs.synbio.mapping.Assignment;
+import de.tu_darmstadt.rs.synbio.mapping.util.BitField;
 
 import java.util.List;
 import java.util.Map;
@@ -11,7 +12,7 @@ import java.util.Set;
 
 public class GeneticSearchIndividual implements Comparable<GeneticSearchIndividual> {
     private Assignment assignment;
-    private String encodedAssignment;
+    private BitField encodedAssignment;
     private Double score;
 
 
@@ -20,11 +21,11 @@ public class GeneticSearchIndividual implements Comparable<GeneticSearchIndividu
         this.encodedAssignment = null;
         this.score = 0.0;
     }
-    public String getEncodedAssignment() {
+    public BitField getEncodedAssignment() {
         return encodedAssignment;
     }
 
-    public void setEncodedAssignment(String encodedAssignment) {
+    public void setEncodedAssignment(BitField encodedAssignment) {
         this.encodedAssignment = encodedAssignment;
     }
     public Assignment getAssignment() {
@@ -42,26 +43,29 @@ public class GeneticSearchIndividual implements Comparable<GeneticSearchIndividu
         return score;
     }
 
-    public static String geneticEncode(Map<LogicType, List<GateRealization>> realizations, Map<LogicType, List<String>> geneEncoding, Assignment assignment) {
-        StringBuilder encodedAssignment = new StringBuilder();
+    public static BitField geneticEncode(Map<LogicType, List<GateRealization>> realizations, Map<LogicType, List<BitField>> geneEncoding, Assignment assignment) {
+        BitField encodedAssignment = new BitField();
 
         for (LogicGate gate : assignment.keySet()) {
             LogicType gateType = gate.getLogicType();
             int listIndex = realizations.get(gateType).indexOf(assignment.get(gate));
-            encodedAssignment.append(geneEncoding.get(gateType).get(listIndex));
+
+            BitField encodedGate = geneEncoding.get(gateType).get(listIndex);
+
+            encodedAssignment.append(encodedGate);
         }
 
-        return encodedAssignment.toString();
+        return encodedAssignment;
     }
-    public static Assignment geneticDecode(Map<LogicType, List<GateRealization>> realizations, Map<LogicType, List<String>> geneEncoding, String encodedAssignment, Set<LogicGate> assignmentGates) {
+    public static Assignment geneticDecode(Map<LogicType, List<GateRealization>> realizations, Map<LogicType, List<BitField>> geneEncoding, BitField encodedAssignment, Set<LogicGate> assignmentGates) {
         Assignment assignment = new Assignment();
 
         int i = 0;
         while (encodedAssignment.length() > 0) {
             LogicGate gate = assignmentGates.toArray(new LogicGate[0])[i];
             int bitWidth = geneEncoding.get(gate.getLogicType()).get(0).length();
-            String encodedGate = encodedAssignment.substring(0, bitWidth);
-            encodedAssignment = encodedAssignment.substring(bitWidth);
+            BitField encodedGate = encodedAssignment.subfield(0, bitWidth);
+            encodedAssignment = encodedAssignment.subfield(bitWidth, encodedAssignment.length());
             int realizationIndex = geneEncoding.get(gate.getLogicType()).indexOf(encodedGate); // TODO: indexOf is inefficient, index could be calculated
             GateRealization realization;
             try {
@@ -69,6 +73,7 @@ public class GeneticSearchIndividual implements Comparable<GeneticSearchIndividu
             } catch (IndexOutOfBoundsException _e) {
                 return null; // Invalid encoding -> return null to signal this
             }
+
             assignment.put(gate, realization);
             i++;
         }
@@ -79,4 +84,5 @@ public class GeneticSearchIndividual implements Comparable<GeneticSearchIndividu
     public int compareTo(GeneticSearchIndividual other) {
         return this.getScore().compareTo(other.getScore()) * -1;
     }
+
 }
