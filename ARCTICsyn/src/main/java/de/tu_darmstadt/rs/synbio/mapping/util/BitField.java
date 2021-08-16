@@ -4,10 +4,11 @@ package de.tu_darmstadt.rs.synbio.mapping.util;
 // and java.util.BitSet does not have a fixed length with leading zeroes
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class BitField {
-  private List<Integer> data;
+  private int[] data;
   private int bitPointer;
 
   public BitField() {
@@ -15,7 +16,7 @@ public class BitField {
   }
 
   public BitField(int length) {
-    this.data = new ArrayList<>((int) Math.ceil(bitPointer / 32.00));
+    this.data = new int[(int) Math.ceil(length / 32.00)];
     this.bitPointer = length;
   }
 
@@ -48,8 +49,8 @@ public class BitField {
     assertCapacity(dataIndex);
     bitPointer = Math.max(bitPointer, index + 1);
 
-    Integer intToModify = data.get(dataIndex);
-    Integer maskInt;
+    int intToModify = data[dataIndex];
+    int maskInt;
 
     if (value) {
       maskInt = 0x0001 << shiftAmount;
@@ -59,7 +60,7 @@ public class BitField {
       maskInt = ~(0x0001 << shiftAmount);
       intToModify = intToModify & maskInt;
     }
-    data.set(dataIndex, intToModify);
+    data[dataIndex] = intToModify;
   }
 
   public void flipBit(int index) {
@@ -68,21 +69,21 @@ public class BitField {
 
     assertCapacity(dataIndex);
 
-    Integer intToModify = data.get(dataIndex);
-    Integer maskInt = 0x0001 << shiftAmount;
+    int intToModify = data[dataIndex];
+    int maskInt = 0x0001 << shiftAmount;
 
-    data.set(dataIndex, intToModify ^ maskInt);
+    data[dataIndex] = intToModify ^ maskInt;
   }
 
   public boolean getBit(int index) {
     int dataIndex = index / 32;
     int shiftAmount = index % 32;
 
-    if (dataIndex >= data.size()) {
+    if (dataIndex >= data.length) {
       return false;
     }
 
-    return (data.get(dataIndex) & (0x0001 << shiftAmount)) != 0;
+    return (data[dataIndex] & (0x0001 << shiftAmount)) != 0;
   }
 
   public BitField subfield(int fromIndex, int toIndex) {
@@ -144,7 +145,7 @@ public class BitField {
 
     final BitField other = (BitField) o;
 
-    return this.data.equals(other.data);
+    return Arrays.equals(this.data, other.data);
   }
 
   @Override
@@ -160,16 +161,13 @@ public class BitField {
   }
 
   private void assertCapacity(int index) {
-    // Check if the Integer list has enough capacity, if not extend it
-    if (index >= data.size()) {
-      int intsToAdd = index - data.size() + 1;
-      List<Integer> toAdd = new ArrayList<>(intsToAdd);
+    // Check if the int list has enough capacity, if not extend it
+    if (index >= data.length) {
+      int[] newData = new int[index + 1];
 
-      for (int i = 0; i < intsToAdd; i++) {
-        toAdd.add(0);
-      }
+      System.arraycopy(data, 0, newData, 0, data.length);
 
-      data.addAll(toAdd);
+      data = newData;
     }
   }
 }
