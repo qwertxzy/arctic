@@ -2,8 +2,10 @@ package de.tu_darmstadt.rs.synbio.mapping.search;
 
 import de.tu_darmstadt.rs.synbio.common.LogicType;
 import de.tu_darmstadt.rs.synbio.common.circuit.Circuit;
+import de.tu_darmstadt.rs.synbio.common.circuit.LogicGate;
 import de.tu_darmstadt.rs.synbio.common.library.GateLibrary;
 import de.tu_darmstadt.rs.synbio.common.library.GateRealization;
+import de.tu_darmstadt.rs.synbio.mapping.Assignment;
 import de.tu_darmstadt.rs.synbio.mapping.MappingConfiguration;
 import de.tu_darmstadt.rs.synbio.mapping.assigner.RandomAssigner;
 import de.tu_darmstadt.rs.synbio.mapping.util.BitField;
@@ -14,14 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
@@ -36,11 +31,13 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
   private final int crossoverCount;
   private final int iterationCount;
   private final double mutationRate;
+
   private final Map<LogicType, List<BitField>> geneEncoding;
   private final Map<LogicType, List<GateRealization>> realizations;
 
+  public GeneticSearch(Circuit structure, GateLibrary lib,
+                       MappingConfiguration mapConfig, SimulationConfiguration simConfig) {
 
-  public GeneticSearch(Circuit structure, GateLibrary lib, MappingConfiguration mapConfig, SimulationConfiguration simConfig) {
     super(structure, lib, mapConfig, simConfig);
 
     this.populationSize = mapConfig.getPopulationSize();
@@ -79,7 +76,10 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     StringBuilder detailCSV = new StringBuilder(); // CSV export of all fitness data for further analysis
 
     int maxThreads = Runtime.getRuntime().availableProcessors() - 1;
-    int availableProcessors = simConfig.simLimitThreads() ? Math.min(simConfig.getSimLimitThreadsNum(), maxThreads) : maxThreads;
+    int availableProcessors = simConfig.simLimitThreads() ?
+        Math.min(simConfig.getSimLimitThreadsNum(), maxThreads) : maxThreads;
+    double sliceLength = populationSize / (double) availableProcessors;
+
 
     List<SimulatorInterface> simulators = new ArrayList<>();
     for (int i = 0; i < availableProcessors; i++) {
@@ -89,6 +89,7 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     }
 
     RandomAssigner randomAssigner = new RandomAssigner(gateLib, structure);
+    Set<LogicGate> assignmentGates = randomAssigner.getNextAssignment().keySet();
     Random random = new Random();
 
     // Declare population related variables
@@ -99,15 +100,12 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     // Generate initial population
 
     for (int i = 0; i < populationSize; i++) {
-      GeneticSearchIndividual individual = new GeneticSearchIndividual(randomAssigner.getNextAssignment());
-      individual.setEncodedAssignment(GeneticSearchIndividual.geneticEncode(realizations, geneEncoding, individual.getAssignment()));
+      BitField encodedAssignment = GeneticSearchIndividual.geneticEncode(
+          realizations, geneEncoding, randomAssigner.getNextAssignment());
+      GeneticSearchIndividual individual = new GeneticSearchIndividual(encodedAssignment);
       currentPopulation.add(individual);
     }
     GeneticSearchIndividual bestIndividual = currentPopulation.get(0);
-
-    // Loop until exit condition is met
-
-    currentIteration = 0;
 
     // Atomic long to increment it from simulation threads
     AtomicLong simCount = new AtomicLong(0);
@@ -115,21 +113,24 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
     logger.info("Generation, Invalid, Top, Top5, Average");
 
+    // Loop until exit condition is met
+    currentIteration = 0;
+
     while (checkExitCondition()) {
 
       // Calculate fitness of current population
       List<GeneticSearchWorker> workers = new ArrayList<>();
-      double sliceLength = currentPopulation.size() / (double) availableProcessors;
       invalidCount.set(0);
 
       // Split up current population into even slices to simulate
       for (int i = 0; i < availableProcessors; i++) {
-        List<GeneticSearchIndividual> slice = currentPopulation.subList((int) Math.ceil(i * sliceLength), (int) Math.ceil((i + 1) * sliceLength));
-        workers.add(new GeneticSearchWorker(simulators.get(i), slice, realizations, geneEncoding, simCount, invalidCount));
+        List<GeneticSearchIndividual> slice =
+            currentPopulation.subList((int) Math.ceil(i * sliceLength), (int) Math.ceil((i + 1) * sliceLength));
+        workers.add(new GeneticSearchWorker(
+            simulators.get(i), slice, realizations, geneEncoding, assignmentGates, simCount, invalidCount));
       }
 
       ExecutorService executor = Executors.newFixedThreadPool(availableProcessors);
-      // TODO: these don't need to be reconstructed each loop
 
       try {
         executor.invokeAll(workers);
@@ -139,21 +140,22 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
       // Sort the current population by fitness
       if (mapConfig.getOptimizationType() == MappingConfiguration.OptimizationType.MAXIMIZE) {
-        Collections.sort(currentPopulation);
+        currentPopulation.sort(Comparator.naturalOrder());
       } else {
-        Collections.sort(currentPopulation, Collections.reverseOrder());
+        currentPopulation.sort(Comparator.reverseOrder());
       }
 
       // Extract the best individual
       GeneticSearchIndividual generationBestIndividual = currentPopulation.get(0);
-      bestIndividual = (generationBestIndividual.getScore() > bestIndividual.getScore() ? generationBestIndividual : bestIndividual);
+      bestIndividual = (generationBestIndividual.getScore() > bestIndividual.getScore() ?
+          generationBestIndividual : bestIndividual);
 
       logger.info(
-              currentIteration +
-                      "," + invalidCount.get() +
-                      "," + bestIndividual.getScore() +
-                      "," + ( (currentPopulation.subList(0, 5).stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum)) / 5.0 ) +
-                      "," + ( currentPopulation.stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum) / populationSize )
+          currentIteration +
+          "," + invalidCount.get() +
+          "," + bestIndividual.getScore() +
+          "," + ( (currentPopulation.subList(0, 5).stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum)) / 5.0 ) +
+          "," + ( currentPopulation.stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum) / populationSize )
       );
 
       detailCSV.append(currentPopulation.stream().map(GeneticSearchIndividual::getScore)
@@ -169,8 +171,7 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
       List<Integer> rankWeights = new ArrayList<>();
       for (int i = 0; i < populationSize; i++) {
-        // Rank n gets (populationSize - n - 1)^2 points
-        rankWeights.add((int) Math.pow((populationSize - i), 2));
+        rankWeights.add(calculateRankWeight(i));
       }
 
       int intervalDistance = rankWeights.stream().reduce(0, Integer::sum) / crossoverCount;
@@ -213,14 +214,11 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
           }
         }
 
-        // Add parent assignment back to individual for future decoding (needs gatemap keyset)
-        GeneticSearchIndividual firstChild = new GeneticSearchIndividual(firstParent.getAssignment());
-        firstChild.setEncodedAssignment(encodedFirstChild);
+        GeneticSearchIndividual firstChild = new GeneticSearchIndividual(encodedFirstChild);
         nextPopulation.add(firstChild);
 
-        GeneticSearchIndividual secondChild = new GeneticSearchIndividual(secondParent.getAssignment());
-        secondChild.setEncodedAssignment(encodedSecondChild);
-        nextPopulation.add(secondChild); // chaansu
+        GeneticSearchIndividual secondChild = new GeneticSearchIndividual(encodedSecondChild);
+        nextPopulation.add(secondChild);
       }
 
       // Apply random mutation
@@ -240,8 +238,9 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       // Fill up the rest with new random individuals
 
       while (nextPopulation.size() < populationSize) {
-        GeneticSearchIndividual individual = new GeneticSearchIndividual(randomAssigner.getNextAssignment());
-        individual.setEncodedAssignment(GeneticSearchIndividual.geneticEncode(realizations, geneEncoding, individual.getAssignment()));
+        BitField encodedAssignment = GeneticSearchIndividual.geneticEncode(
+            realizations, geneEncoding, randomAssigner.getNextAssignment());
+        GeneticSearchIndividual individual = new GeneticSearchIndividual(encodedAssignment);
         nextPopulation.add(individual);
       }
 
@@ -250,7 +249,9 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       nextPopulation = new ArrayList<>();
     }
 
-    SimulationResult result = new SimulationResult(structure, bestIndividual.getAssignment(), bestIndividual.getScore());
+    Assignment bestAssignment = GeneticSearchIndividual.geneticDecode(
+        realizations, geneEncoding, bestIndividual.getEncodedAssignment(), assignmentGates);
+    SimulationResult result = new SimulationResult(structure, bestAssignment, bestIndividual.getScore());
     result.setNeededSimulations(simCount.get());
 
     for (SimulatorInterface sim : simulators) {
@@ -267,6 +268,12 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     }
 
     return result;
+  }
+
+  // Function for calculating the roulette wheel weight for a given rank within the population
+  private int calculateRankWeight(int rank) {
+    // Rank n gets a weight of (popSize - n)^2
+    return (int) Math.pow((populationSize - rank), 2);
   }
 
   private int currentIteration;

@@ -11,14 +11,11 @@ import java.util.Map;
 import java.util.Set;
 
 public class GeneticSearchIndividual implements Comparable<GeneticSearchIndividual> {
-    private Assignment assignment;
     private BitField encodedAssignment;
     private Double score;
 
-
-    GeneticSearchIndividual(Assignment assignment) {
-        this.assignment = assignment;
-        this.encodedAssignment = null;
+    GeneticSearchIndividual(BitField encodedAssignment) {
+        this.encodedAssignment = encodedAssignment;
         this.score = 0.0;
     }
     public BitField getEncodedAssignment() {
@@ -28,13 +25,7 @@ public class GeneticSearchIndividual implements Comparable<GeneticSearchIndividu
     public void setEncodedAssignment(BitField encodedAssignment) {
         this.encodedAssignment = encodedAssignment;
     }
-    public Assignment getAssignment() {
-        return this.assignment;
-    }
 
-    public void setAssignment(Assignment assignment) {
-        this.assignment = assignment;
-    }
     public void setScore(Double score) {
         this.score = score;
     }
@@ -43,7 +34,9 @@ public class GeneticSearchIndividual implements Comparable<GeneticSearchIndividu
         return score;
     }
 
-    public static BitField geneticEncode(Map<LogicType, List<GateRealization>> realizations, Map<LogicType, List<BitField>> geneEncoding, Assignment assignment) {
+    public static BitField geneticEncode(Map<LogicType, List<GateRealization>> realizations, Map<LogicType,
+        List<BitField>> geneEncoding, Assignment assignment) {
+
         BitField encodedAssignment = new BitField();
 
         for (LogicGate gate : assignment.keySet()) {
@@ -57,7 +50,9 @@ public class GeneticSearchIndividual implements Comparable<GeneticSearchIndividu
 
         return encodedAssignment;
     }
-    public static Assignment geneticDecode(Map<LogicType, List<GateRealization>> realizations, Map<LogicType, List<BitField>> geneEncoding, BitField encodedAssignment, Set<LogicGate> assignmentGates) {
+    public static Assignment geneticDecode(Map<LogicType, List<GateRealization>> realizations, Map<LogicType,
+        List<BitField>> geneEncoding, BitField encodedAssignment, Set<LogicGate> assignmentGates) {
+
         Assignment assignment = new Assignment();
 
         int i = 0;
@@ -66,7 +61,7 @@ public class GeneticSearchIndividual implements Comparable<GeneticSearchIndividu
             int bitWidth = geneEncoding.get(gate.getLogicType()).get(0).length();
             BitField encodedGate = encodedAssignment.subfield(0, bitWidth);
             encodedAssignment = encodedAssignment.subfield(bitWidth, encodedAssignment.length());
-            int realizationIndex = geneEncoding.get(gate.getLogicType()).indexOf(encodedGate); // TODO: indexOf is inefficient, index could be calculated
+            int realizationIndex = geneEncoding.get(gate.getLogicType()).indexOf(encodedGate);
             GateRealization realization;
             try {
                 realization = realizations.get(gate.getLogicType()).get(realizationIndex);

@@ -3,10 +3,9 @@ package de.tu_darmstadt.rs.synbio.mapping.util;
 // Custom class for managing large amounts of binary values as boolean[] would take up too much space
 // and java.util.BitSet does not have a fixed length with leading zeroes
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
+@SuppressWarnings("unused")
 public class BitField {
   private int[] data;
   private int bitPointer;
