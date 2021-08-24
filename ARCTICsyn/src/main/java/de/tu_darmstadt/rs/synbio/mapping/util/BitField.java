@@ -27,6 +27,11 @@ public class BitField {
     }
   }
 
+  public BitField(BitField other) {
+    this.data = other.data.clone();
+    this.bitPointer = other.bitPointer;
+  }
+
   public void append(boolean bit) {
     this.setBit(bitPointer, bit);
   }

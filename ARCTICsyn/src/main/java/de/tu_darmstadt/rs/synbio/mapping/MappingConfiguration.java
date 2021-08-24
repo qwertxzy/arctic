@@ -19,11 +19,6 @@ public class MappingConfiguration {
 
     private final MappingConfiguration.SearchAlgorithm searchAlgorithm;
     private final MappingConfiguration.OptimizationType optimizationType;
-    private final int populationSize;
-    private final int eliteNumber;
-    private final int crossoverCount;
-    private final int iterationCount;
-    private final double mutationRate;
 
     public enum SearchAlgorithm {
         EXHAUSTIVE, TABU, ANNEALING, DAC, GENETIC
@@ -86,13 +81,6 @@ public class MappingConfiguration {
             default:
                 throw new IOException("Unknown optimization type! (Available types: " + Arrays.toString(OptimizationType.values()) + ")");
         }
-
-        // Parse GENETIC specific parameters
-        this.populationSize = Integer.parseInt(props.getProperty("POPULATION_SIZE", "0"));
-        this.eliteNumber = Integer.parseInt(props.getProperty("ELITE_NUMBER", "0"));
-        this.crossoverCount = Integer.parseInt(props.getProperty("CROSSOVER_COUNT", "0"));
-        this.iterationCount = Integer.parseInt(props.getProperty("ITERATION_COUNT", "0"));
-        this.mutationRate = Double.parseDouble(props.getProperty("MUTATION_RATE", "0"));
     }
 
     public void print() {
@@ -102,26 +90,6 @@ public class MappingConfiguration {
 
     public OptimizationType getOptimizationType() {
         return optimizationType;
-    }
-
-    public int getPopulationSize() {
-        return populationSize;
-    }
-
-    public int getEliteNumber() {
-        return eliteNumber;
-    }
-
-    public int getCrossoverCount() {
-        return crossoverCount;
-    }
-
-    public int getIterationCount() {
-        return iterationCount;
-    }
-
-    public double getMutationRate() {
-        return mutationRate;
     }
 
     /* factories */

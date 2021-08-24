@@ -18,6 +18,12 @@ public class GeneticSearchIndividual implements Comparable<GeneticSearchIndividu
         this.encodedAssignment = encodedAssignment;
         this.score = 0.0;
     }
+
+    GeneticSearchIndividual(GeneticSearchIndividual other) {
+        this.encodedAssignment = new BitField(other.getEncodedAssignment());
+        this.score = other.getScore();
+    }
+
     public BitField getEncodedAssignment() {
         return encodedAssignment;
     }

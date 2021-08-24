@@ -40,11 +40,12 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
     super(structure, lib, mapConfig, simConfig);
 
-    this.populationSize = mapConfig.getPopulationSize();
-    this.eliteNumber = mapConfig.getEliteNumber();
-    this.crossoverCount = mapConfig.getCrossoverCount();
-    this.iterationCount = mapConfig.getIterationCount();
-    this.mutationRate = mapConfig.getMutationRate();
+    // Set genetic parameters based on circuit size
+    this.populationSize = structure.getNumberLogicGates() * 180;
+    this.eliteNumber = 1;
+    this.crossoverCount = structure.getNumberLogicGates() * 150;
+    this.iterationCount = 150;
+    this.mutationRate = 0.02;
 
     // Generate gene encoding lookup
     this.realizations = gateLib.getRealizations();
@@ -147,13 +148,14 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
       // Extract the best individual
       GeneticSearchIndividual generationBestIndividual = currentPopulation.get(0);
-      bestIndividual = (generationBestIndividual.getScore() > bestIndividual.getScore() ?
-          generationBestIndividual : bestIndividual);
+      if (generationBestIndividual.getScore() > bestIndividual.getScore()) {
+        bestIndividual = new GeneticSearchIndividual(generationBestIndividual);
+      }
 
       logger.info(
           currentIteration +
           "," + invalidCount.get() +
-          "," + bestIndividual.getScore() +
+          "," + generationBestIndividual.getScore() +
           "," + ( (currentPopulation.subList(0, 5).stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum)) / 5.0 ) +
           "," + ( currentPopulation.stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum) / populationSize )
       );
@@ -272,8 +274,8 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
   // Function for calculating the roulette wheel weight for a given rank within the population
   private int calculateRankWeight(int rank) {
-    // Rank n gets a weight of (popSize - n)^2
-    return (int) Math.pow((populationSize - rank), 2);
+    // Rank n gets a weight of (popSize - n)^1.9
+    return (int) Math.pow((populationSize - rank), 1.9);
   }
 
   private int currentIteration;
