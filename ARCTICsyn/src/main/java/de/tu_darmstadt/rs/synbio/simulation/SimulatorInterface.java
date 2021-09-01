@@ -75,8 +75,11 @@ public class SimulatorInterface {
 
         double score = 0.0;
 
-        if (!simProcess.isAlive())
+        // TODO restore this (no braces, no termination)
+        if (!simProcess.isAlive()) {
             logger.error("sim process aborted");
+            return score;
+        }
 
         try {
             String assignmentStr = mapper.writeValueAsString(assignmentIdentifiers);

@@ -20,6 +20,9 @@ public class MappingConfiguration {
     private final MappingConfiguration.SearchAlgorithm searchAlgorithm;
     private final MappingConfiguration.OptimizationType optimizationType;
 
+    private final int iterationCount;
+    private final double minimumVariety;
+
     public enum SearchAlgorithm {
         EXHAUSTIVE, TABU, ANNEALING, DAC, GENETIC
     }
@@ -81,6 +84,9 @@ public class MappingConfiguration {
             default:
                 throw new IOException("Unknown optimization type! (Available types: " + Arrays.toString(OptimizationType.values()) + ")");
         }
+
+        this.iterationCount = Integer.parseInt(props.getProperty("ITERATION_COUNT", "0"));
+        this.minimumVariety = Double.parseDouble(props.getProperty("MINIMUM_VARIETY", "0"));
     }
 
     public void print() {
@@ -90,6 +96,15 @@ public class MappingConfiguration {
 
     public OptimizationType getOptimizationType() {
         return optimizationType;
+    }
+
+
+    public int getIterationCount() {
+        return iterationCount;
+    }
+
+    public double getMinimumVariety() {
+        return minimumVariety;
     }
 
     /* factories */

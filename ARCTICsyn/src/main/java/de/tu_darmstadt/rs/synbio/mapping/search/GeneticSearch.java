@@ -27,10 +27,15 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
   private static final Logger logger = LoggerFactory.getLogger(GeneticSearch.class);
 
   private final int populationSize;
-  private final int eliteNumber ;
+  private final int eliteNumber;
   private final int crossoverCount;
-  private final int iterationCount;
   private final double mutationRate;
+
+  private final int iterationCount;
+  private final double minimumVariety;
+
+  private int consecInvalidThresh;
+  private int consecStaleThresh;
 
   private final Map<LogicType, List<BitField>> geneEncoding;
   private final Map<LogicType, List<GateRealization>> realizations;
@@ -44,8 +49,15 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     this.populationSize = structure.getNumberLogicGates() * 180;
     this.eliteNumber = 1;
     this.crossoverCount = structure.getNumberLogicGates() * 150;
-    this.iterationCount = 150;
     this.mutationRate = 0.02;
+
+    logger.info("" + populationSize);
+
+    //this.iterationCount = 150;
+    this.iterationCount = mapConfig.getIterationCount();
+    this.minimumVariety = mapConfig.getMinimumVariety();
+    this.consecInvalidThresh = 0;
+    this.consecStaleThresh = 0;
 
     // Generate gene encoding lookup
     this.realizations = gateLib.getRealizations();
@@ -70,6 +82,34 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     }
   }
 
+  private long evaluateAndSortPopulation(List<GeneticSearchIndividual> population, List<SimulatorInterface> simulators, Set<LogicGate> gates, ExecutorService executor, AtomicLong simCtr) {
+    List<GeneticSearchWorker> workers = new ArrayList<>();
+    int workerCount = simulators.size();
+    double sliceLength = population.size() / (double) workerCount;
+    AtomicLong invalidCount = new AtomicLong(0);
+
+    // Split up current population into even slices to simulate
+    for (int i = 0; i < workerCount; i++) {
+      List<GeneticSearchIndividual> slice = population.subList((int) Math.ceil(i * sliceLength), (int) Math.ceil((i + 1) * sliceLength));
+      workers.add(new GeneticSearchWorker(simulators.get(i), slice, realizations, geneEncoding, gates, simCtr, invalidCount));
+    }
+
+    try {
+      executor.invokeAll(workers);
+    } catch (InterruptedException e) {
+      logger.error(e.getMessage());
+    }
+
+    // Sort the current population by fitness
+    if (mapConfig.getOptimizationType() == MappingConfiguration.OptimizationType.MAXIMIZE) {
+      Collections.sort(population);
+    } else {
+      Collections.sort(population, Collections.reverseOrder());
+    }
+
+    return invalidCount.get();
+  }
+
   public SimulationResult assign() {
 
     // Initialize gate library & simulators
@@ -88,6 +128,7 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       sim.initSimulation(structure);
       simulators.add(sim);
     }
+    ExecutorService executor = Executors.newFixedThreadPool(availableProcessors);
 
     RandomAssigner randomAssigner = new RandomAssigner(gateLib, structure);
     Set<LogicGate> assignmentGates = randomAssigner.getNextAssignment().keySet();
@@ -104,64 +145,37 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       BitField encodedAssignment = GeneticSearchIndividual.geneticEncode(
           realizations, geneEncoding, randomAssigner.getNextAssignment());
       GeneticSearchIndividual individual = new GeneticSearchIndividual(encodedAssignment);
-      currentPopulation.add(individual);
+      nextPopulation.add(individual);
     }
-    GeneticSearchIndividual bestIndividual = currentPopulation.get(0);
 
     // Atomic long to increment it from simulation threads
     AtomicLong simCount = new AtomicLong(0);
-    AtomicLong invalidCount = new AtomicLong();
 
     logger.info("Generation, Invalid, Top, Top5, Average");
 
-    // Loop until exit condition is met
-    currentIteration = 0;
+    // Evaluate initial population
+    long invalidCount = evaluateAndSortPopulation(nextPopulation, simulators, assignmentGates, executor, simCount);
 
-    while (checkExitCondition()) {
+    // Set the best individual
+    GeneticSearchIndividual bestIndividual = nextPopulation.get(0);
 
-      // Calculate fitness of current population
-      List<GeneticSearchWorker> workers = new ArrayList<>();
-      invalidCount.set(0);
+    // Log stats of the first population
+    double averageScore = ( nextPopulation.stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum) / populationSize );
+    logger.info(
+            currentIteration +
+                    "," + invalidCount +
+                    "," + bestIndividual.getScore() +
+                    "," + ( (nextPopulation.subList(0, 5).stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum)) / 5.0 ) +
+                    "," + averageScore
+    );
+    detailCSV.append(nextPopulation.stream().map(GeneticSearchIndividual::getScore)
+            .map(Objects::toString).collect(Collectors.joining(","))).append("\n");
 
-      // Split up current population into even slices to simulate
-      for (int i = 0; i < availableProcessors; i++) {
-        List<GeneticSearchIndividual> slice =
-            currentPopulation.subList((int) Math.ceil(i * sliceLength), (int) Math.ceil((i + 1) * sliceLength));
-        workers.add(new GeneticSearchWorker(
-            simulators.get(i), slice, realizations, geneEncoding, assignmentGates, simCount, invalidCount));
-      }
-
-      ExecutorService executor = Executors.newFixedThreadPool(availableProcessors);
-
-      try {
-        executor.invokeAll(workers);
-      } catch (InterruptedException e) {
-        logger.error(e.getMessage());
-      }
-
-      // Sort the current population by fitness
-      if (mapConfig.getOptimizationType() == MappingConfiguration.OptimizationType.MAXIMIZE) {
-        currentPopulation.sort(Comparator.naturalOrder());
-      } else {
-        currentPopulation.sort(Comparator.reverseOrder());
-      }
-
-      // Extract the best individual
-      GeneticSearchIndividual generationBestIndividual = currentPopulation.get(0);
-      if (generationBestIndividual.getScore() > bestIndividual.getScore()) {
-        bestIndividual = new GeneticSearchIndividual(generationBestIndividual);
-      }
-
-      logger.info(
-          currentIteration +
-          "," + invalidCount.get() +
-          "," + generationBestIndividual.getScore() +
-          "," + ( (currentPopulation.subList(0, 5).stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum)) / 5.0 ) +
-          "," + ( currentPopulation.stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum) / populationSize )
-      );
-
-      detailCSV.append(currentPopulation.stream().map(GeneticSearchIndividual::getScore)
-          .map(Objects::toString).collect(Collectors.joining(","))).append("\n");
+    // TODO: restructure the loop to allow consideration of nextPopulation-scores in exit condition
+    while (checkExitCondition(invalidCount, nextPopulation, averageScore, bestIndividual.getScore(), currentPopulation)) {
+      // Move the next generation's individuals to the current generation
+      currentPopulation = nextPopulation;
+      nextPopulation = new ArrayList<>();
 
       // Select the best n as elites to be carried over to the next generation
 
@@ -246,14 +260,31 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
         nextPopulation.add(individual);
       }
 
-      // Move the next generation's individuals to the current generation
-      currentPopulation = nextPopulation;
-      nextPopulation = new ArrayList<>();
-    }
+      // Evaluate the resulting population
+      invalidCount = evaluateAndSortPopulation(nextPopulation, simulators, assignmentGates, executor, simCount);
 
-    Assignment bestAssignment = GeneticSearchIndividual.geneticDecode(
-        realizations, geneEncoding, bestIndividual.getEncodedAssignment(), assignmentGates);
-    SimulationResult result = new SimulationResult(structure, bestAssignment, bestIndividual.getScore());
+      // Extract the best individual
+      GeneticSearchIndividual generationBestIndividual = nextPopulation.get(0);
+      // TODO: If config allows for minimizing the score, shouldn't this be considered here?
+      bestIndividual = (generationBestIndividual.getScore() > bestIndividual.getScore() ? generationBestIndividual : bestIndividual);
+
+      // Log stats of the resulting population
+      averageScore = ( nextPopulation.stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum) / populationSize );
+      logger.info(
+              currentIteration +
+                      "," + invalidCount +
+                      "," + bestIndividual.getScore() +
+                      "," + ( (nextPopulation.subList(0, 5).stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum)) / 5.0 ) +
+                      "," + averageScore
+      );
+      detailCSV.append(nextPopulation.stream().map(GeneticSearchIndividual::getScore)
+              .map(Objects::toString).collect(Collectors.joining(","))).append("\n");
+    }
+    currentPopulation = nextPopulation;
+
+      Assignment bestAssignment = GeneticSearchIndividual.geneticDecode(
+              realizations, geneEncoding, bestIndividual.getEncodedAssignment(), assignmentGates);
+      SimulationResult result = new SimulationResult(structure, bestAssignment, bestIndividual.getScore());
     result.setNeededSimulations(simCount.get());
 
     for (SimulatorInterface sim : simulators) {
@@ -280,10 +311,53 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
   private int currentIteration;
 
-  private boolean checkExitCondition() {
-    currentIteration++;
-    // FIXME: Switch depending on exit after n iterations or achieved score or whatever
-    return currentIteration <= iterationCount;
+  // TODO set thresholds, evaluate which of the criteria make sense
+  private boolean checkExitCondition(long invalidCount, List<GeneticSearchIndividual> population, double averageScore, double topScore, List<GeneticSearchIndividual> lastPopulation) {
+    // Criteria #1: Iteration count
+    ++currentIteration;
+    if (iterationCount > 0 && currentIteration > iterationCount) {
+      logger.info("Iteration limit reached - Terminating.");
+      return false;
+    }
+    logger.info("---------------------------------");
+    logger.info("Iteration " + currentIteration);
+
+    // Criteria #2: Genetic Variety
+    if (invalidCount < 0.02 * populationSize) {
+      if (++consecInvalidThresh > 5) {
+        logger.info("Invalid count has stagnated - Terminating.");
+        return false;
+      }
+    } else {
+      consecInvalidThresh = 0;
+    }
+
+    // Criteria #3: Genetic Variety
+    if (minimumVariety > 0 && (topScore / averageScore - 1.0) > minimumVariety) {
+      logger.info("Population fitness has balanced out - Terminating.");
+      return false;
+    }
+    logger.info("Genetic Variety: " + (topScore / averageScore - 1.0));
+
+    // Criteria #4: No significant change across iterations
+    if (lastPopulation == null || lastPopulation.size() == 0)
+      return true;
+    double lastAverage = ( lastPopulation.stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum) / populationSize );
+    double lastTop = lastPopulation.get(0).getScore();
+    double currentTop = population.get(0).getScore();
+
+    if (Math.abs(averageScore / lastAverage - 1.0) < 0.001 && currentTop != lastTop) {
+      if (++consecStaleThresh > 5) {
+        logger.info("No significant change over several iterations - Terminating.");
+        return false;
+      }
+    }
+    else {
+      consecStaleThresh = 0;
+    }
+
+    // No Exit Criteria were met. Continue
+    return true;
   }
 
   // Taken from https://www.programcreek.com/2014/05/leetcode-gray-code-java/

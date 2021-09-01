@@ -67,6 +67,7 @@ public class Main {
         /* input handling */
 
         TruthTable inputTruthTable;
+        System.out.println(cmd.getOptionValue("truthtable"));
 
         if (cmd.hasOption("function")) {
             inputTruthTable = new TruthTable(ExpressionParser.parse(cmd.getOptionValue("function")));
