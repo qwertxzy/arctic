@@ -157,7 +157,7 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     long invalidCount = evaluateAndSortPopulation(nextPopulation, simulators, assignmentGates, executor, simCount);
 
     // Set the best individual
-    GeneticSearchIndividual bestIndividual = nextPopulation.get(0);
+    GeneticSearchIndividual bestIndividual = new GeneticSearchIndividual(nextPopulation.get(0));
 
     // Log stats of the first population
     double averageScore = ( nextPopulation.stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum) / populationSize );
@@ -264,9 +264,13 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       invalidCount = evaluateAndSortPopulation(nextPopulation, simulators, assignmentGates, executor, simCount);
 
       // Extract the best individual
-      GeneticSearchIndividual generationBestIndividual = nextPopulation.get(0);
-      // TODO: If config allows for minimizing the score, shouldn't this be considered here?
-      bestIndividual = (generationBestIndividual.getScore() > bestIndividual.getScore() ? generationBestIndividual : bestIndividual);
+      GeneticSearchIndividual generationBestIndividual = new GeneticSearchIndividual(nextPopulation.get(0));
+
+      if (mapConfig.getOptimizationType() == MappingConfiguration.OptimizationType.MAXIMIZE) {
+        bestIndividual = (generationBestIndividual.getScore() > bestIndividual.getScore() ? generationBestIndividual : bestIndividual);
+      } else {
+        bestIndividual = (generationBestIndividual.getScore() < bestIndividual.getScore() ? generationBestIndividual : bestIndividual);
+      }
 
       // Log stats of the resulting population
       averageScore = ( nextPopulation.stream().map(GeneticSearchIndividual::getScore).reduce(0.0, Double::sum) / populationSize );
@@ -280,7 +284,6 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
       detailCSV.append(nextPopulation.stream().map(GeneticSearchIndividual::getScore)
               .map(Objects::toString).collect(Collectors.joining(","))).append("\n");
     }
-    currentPopulation = nextPopulation;
 
       Assignment bestAssignment = GeneticSearchIndividual.geneticDecode(
               realizations, geneEncoding, bestIndividual.getEncodedAssignment(), assignmentGates);
