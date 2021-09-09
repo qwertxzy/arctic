@@ -171,7 +171,6 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
     detailCSV.append(nextPopulation.stream().map(GeneticSearchIndividual::getScore)
             .map(Objects::toString).collect(Collectors.joining(","))).append("\n");
 
-    // TODO: restructure the loop to allow consideration of nextPopulation-scores in exit condition
     while (checkExitCondition(invalidCount, nextPopulation, averageScore, bestIndividual.getScore(), currentPopulation)) {
       // Move the next generation's individuals to the current generation
       currentPopulation = nextPopulation;
@@ -314,7 +313,6 @@ public class GeneticSearch extends AssignmentSearchAlgorithm {
 
   private int currentIteration;
 
-  // TODO set thresholds, evaluate which of the criteria make sense
   private boolean checkExitCondition(long invalidCount, List<GeneticSearchIndividual> population, double averageScore, double topScore, List<GeneticSearchIndividual> lastPopulation) {
     // Criteria #1: Iteration count
     ++currentIteration;
